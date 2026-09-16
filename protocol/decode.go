@@ -48,6 +48,10 @@ type Decoder struct {
 
 	Signal    []float32
 	Quantized []byte
+	// Raw interleaved 8-bit IQ, in the same sample coordinates as the
+	// parsers' full-length signal buffers, so a packet found at index i
+	// occupies IQ[i*2 : (i+PacketLength)*2]. Kept for carrier estimation.
+	IQ []byte
 
 	csum  []float32
 	demod Demodulator
@@ -143,6 +147,7 @@ func (d *Decoder) Allocate() {
 	// Allocate necessary buffers.
 	d.Signal = make([]float32, d.Cfg.BlockSize+d.Cfg.SymbolLength)
 	d.Quantized = make([]byte, d.Cfg.BufferLength)
+	d.IQ = make([]byte, d.Cfg.BufferLength<<1)
 
 	d.csum = make([]float32, len(d.Signal)+1)
 
@@ -164,6 +169,8 @@ func (d Decoder) Decode(input []byte) chan Message {
 	// Shift buffers to append new block.
 	copy(d.Signal, d.Signal[d.Cfg.BlockSize:])
 	copy(d.Quantized, d.Quantized[d.Cfg.BlockSize:])
+	copy(d.IQ, d.IQ[d.Cfg.BlockSize<<1:])
+	copy(d.IQ[d.Cfg.PacketLength<<1:], input)
 
 	// Compute the magnitude of the new block.
 	d.demod.Execute(input, d.Signal[d.Cfg.SymbolLength:])

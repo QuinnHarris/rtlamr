@@ -17,7 +17,6 @@
 package scmplus
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"strconv"
@@ -35,9 +34,12 @@ type Parser struct {
 	crc.CRC
 	cfg  protocol.PacketConfig
 	data protocol.Data
+	d    *protocol.Decoder
 }
 
-func (p Parser) SetDecoder(d *protocol.Decoder) {}
+func (p *Parser) SetDecoder(d *protocol.Decoder) {
+	p.d = d
+}
 
 func (p *Parser) Cfg() protocol.PacketConfig {
 	return p.cfg
@@ -85,6 +87,7 @@ func (p Parser) Parse(pkts []protocol.Data, msgCh chan protocol.Message, wg *syn
 			continue
 		}
 
+		scm.CarrierOffset = p.d.PacketCarrierOffset(pkt.Idx, p.cfg.PacketSymbols, nil)
 		msgCh <- scm
 	}
 
@@ -100,10 +103,20 @@ type SCM struct {
 	Consumption  uint32 `xml:",attr"`
 	Tamper       uint16 `xml:",attr"`
 	PacketCRC    uint16 `xml:"Checksum,attr",json:"Checksum"`
+	// Estimated carrier offset from the receiver's tuned center, Hz.
+	// nil when no estimate could be made. Not part of the digest.
+	CarrierOffset *int64 `xml:",attr,omitempty"`
 }
 
 func NewSCM(data protocol.Data) (scm SCM) {
-	binary.Read(bytes.NewReader(data.Bytes), binary.BigEndian, &scm)
+	b := data.Bytes
+	scm.FrameSync = binary.BigEndian.Uint16(b[0:2])
+	scm.ProtocolID = b[2]
+	scm.EndpointType = b[3]
+	scm.EndpointID = binary.BigEndian.Uint32(b[4:8])
+	scm.Consumption = binary.BigEndian.Uint32(b[8:12])
+	scm.Tamper = binary.BigEndian.Uint16(b[12:14])
+	scm.PacketCRC = binary.BigEndian.Uint16(b[14:16])
 
 	return
 }
@@ -145,6 +158,7 @@ func (scm SCM) Record() (r []string) {
 	r = append(r, strconv.FormatUint(uint64(scm.Consumption), 10))
 	r = append(r, "0x"+strconv.FormatUint(uint64(scm.Tamper), 16))
 	r = append(r, "0x"+strconv.FormatUint(uint64(scm.PacketCRC), 16))
+	r = append(r, protocol.FormatCarrierOffset(scm.CarrierOffset))
 
 	return
 }

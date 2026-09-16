@@ -35,9 +35,12 @@ type Parser struct {
 	crc.CRC
 	cfg  protocol.PacketConfig
 	data protocol.Data
+	d    *protocol.Decoder
 }
 
-func (p Parser) SetDecoder(*protocol.Decoder) {}
+func (p *Parser) SetDecoder(d *protocol.Decoder) {
+	p.d = d
+}
 
 func (p Parser) Cfg() protocol.PacketConfig {
 	return p.cfg
@@ -91,6 +94,7 @@ func (p Parser) Parse(pkts []protocol.Data, msgCh chan protocol.Message, wg *syn
 			continue
 		}
 
+		idm.CarrierOffset = p.d.PacketCarrierOffset(pkt.Idx, p.cfg.PacketSymbols, nil)
 		msgCh <- idm
 	}
 
@@ -116,6 +120,9 @@ type IDM struct {
 	TransmitTimeOffset               uint16
 	SerialNumberCRC                  uint16
 	PacketCRC                        uint16
+	// Estimated carrier offset from the receiver's tuned center, Hz.
+	// nil when no estimate could be made. Not part of the digest.
+	CarrierOffset *int64 `xml:",omitempty"`
 }
 
 func NewIDM(data protocol.Data) (idm IDM) {
@@ -216,6 +223,7 @@ func (idm IDM) Record() (r []string) {
 	r = append(r, fmt.Sprintf("%d", idm.TransmitTimeOffset))
 	r = append(r, fmt.Sprintf("0x%04X", idm.SerialNumberCRC))
 	r = append(r, fmt.Sprintf("0x%04X", idm.PacketCRC))
+	r = append(r, protocol.FormatCarrierOffset(idm.CarrierOffset))
 
 	return
 }

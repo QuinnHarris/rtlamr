@@ -24,7 +24,6 @@ type NewParserFunc func(symbolLength int) Parser
 // Later used by underscore importing each parser package:
 //
 // import _ "github.com/bemasher/rtlamr/scm"
-//
 func RegisterParser(name string, parserFn NewParserFunc) {
 	parserMutex.Lock()
 	defer parserMutex.Unlock()

@@ -34,6 +34,7 @@ type Parser struct {
 	crc.CRC
 	cfg  protocol.PacketConfig
 	data protocol.Data
+	d    *protocol.Decoder
 }
 
 func NewParser(chipLength int) (p protocol.Parser) {
@@ -52,7 +53,9 @@ func NewParser(chipLength int) (p protocol.Parser) {
 	}
 }
 
-func (p Parser) SetDecoder(d *protocol.Decoder) {}
+func (p *Parser) SetDecoder(d *protocol.Decoder) {
+	p.d = d
+}
 
 func (p *Parser) Cfg() protocol.PacketConfig {
 	return p.cfg
@@ -84,6 +87,7 @@ func (p Parser) Parse(pkts []protocol.Data, msgCh chan protocol.Message, wg *syn
 			continue
 		}
 
+		scm.CarrierOffset = p.d.PacketCarrierOffset(pkt.Idx, p.cfg.PacketSymbols, nil)
 		msgCh <- scm
 	}
 
@@ -98,6 +102,9 @@ type SCM struct {
 	TamperEnc   uint8  `xml:",attr"`
 	Consumption uint32 `xml:",attr"`
 	ChecksumVal uint16 `xml:"Checksum,attr"`
+	// Estimated carrier offset from the receiver's tuned center, Hz.
+	// nil when no estimate could be made. Not part of the digest.
+	CarrierOffset *int64 `xml:",attr,omitempty"`
 }
 
 func NewSCM(data protocol.Data) (scm SCM) {
@@ -149,6 +156,7 @@ func (scm SCM) Record() (r []string) {
 	r = append(r, "0x"+strconv.FormatUint(uint64(scm.TamperEnc), 16))
 	r = append(r, strconv.FormatUint(uint64(scm.Consumption), 10))
 	r = append(r, "0x"+strconv.FormatUint(uint64(scm.ChecksumVal), 16))
+	r = append(r, protocol.FormatCarrierOffset(scm.CarrierOffset))
 
 	return
 }

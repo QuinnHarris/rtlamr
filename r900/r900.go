@@ -19,6 +19,7 @@ package r900
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
 
@@ -241,6 +242,10 @@ func (p *Parser) Parse(pkts []protocol.Data, msgCh chan protocol.Message, wg *sy
 		r900.LeakNow = uint8(leaknow)
 		copy(r900.checksum[:], symbols[16:])
 
+		if off, ok := p.Decoder.CarrierOffsetHz(pkt.Idx, cfg.PacketLength, p.signal); ok {
+			v := int64(math.Round(off))
+			r900.CarrierOffset = &v
+		}
 		msgCh <- r900
 	}
 
@@ -256,7 +261,10 @@ type R900 struct {
 	Unkn3       uint8  `xml:",attr"` // 2 bits
 	Leak        uint8  `xml:",attr"` // 4 bits, day bins of leak
 	LeakNow     uint8  `xml:",attr"` // 2 bits, leak past 24h hi/lo
-	checksum    [5]byte
+	// Estimated carrier offset from the receiver's tuned center, Hz.
+	// nil when no estimate could be made. Not part of the digest.
+	CarrierOffset *int64 `xml:",attr,omitempty"`
+	checksum      [5]byte
 }
 
 func (r900 R900) MsgType() string {
@@ -297,6 +305,7 @@ func (r900 R900) Record() (r []string) {
 	r = append(r, strconv.FormatUint(uint64(r900.Unkn3), 10))
 	r = append(r, strconv.FormatUint(uint64(r900.Leak), 10))
 	r = append(r, strconv.FormatUint(uint64(r900.LeakNow), 10))
+	r = append(r, protocol.FormatCarrierOffset(r900.CarrierOffset))
 
 	return
 }
